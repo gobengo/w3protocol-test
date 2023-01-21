@@ -97,6 +97,43 @@ test('can list items in a space', { skip: false }, async t => {
   assert.equal(caseErrors.length, 0, 'no cases resulted in an error')
 })
 
+test('can delegate space/info fo a space', { only: true }, async (t) => {
+  const w3 = createHttpConnection(
+    'did:web:web3.storage' as const,
+    new URL('https://access.web3.storage'),
+  )
+  const space = await ed25519.generate();
+  const alice = await ed25519.generate();
+  const aliceCanSpaceInfo = await ucanto.delegate({
+    issuer: space,
+    audience: alice,
+    capabilities: [
+      {
+        can: 'space/info',
+        with: space.did(),
+      }
+    ],
+    expiration: Infinity,
+  });
+  const aliceSpaceInfoInvocation = await Client.invoke({
+    issuer: alice,
+    audience: w3.id,
+    capability: {
+      can: 'space/info',
+      with: space.did(),
+      nb: {},
+    },
+    proofs: [aliceCanSpaceInfo],
+  })
+  const spaceInfoResult = await w3.execute(aliceSpaceInfoInvocation);
+  try {
+    assert.equal('status' in spaceInfoResult && spaceInfoResult.status, 404, 'error is status 404')
+  } catch (error) {
+    console.warn('unexpected result from space/info invocation', spaceInfoResult);
+    throw error;
+  }
+})
+
 // skipped for now while we know it doesn't work
 test('w3protocol-test can upload file', { skip: true }, async (t) => {
   const space = await ed25519.generate();
