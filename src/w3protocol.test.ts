@@ -127,7 +127,12 @@ test('can delegate space/info fo a space', { only: true }, async (t) => {
   })
   const spaceInfoResult = await w3.execute(aliceSpaceInfoInvocation);
   try {
-    assert.equal('status' in spaceInfoResult && spaceInfoResult.status, 404, 'error is status 404')
+    if ('error' in spaceInfoResult) {
+      assert.equal('status' in spaceInfoResult && spaceInfoResult.status, 404, 'error has a status code')
+    } else {
+      // result seems relatively undocumented, but pulled this assertion from access-api space/info tests https://github.com/web3-storage/w3protocol/blob/1bacd544da803c43cf85043ecdada4dee2b3e2d3/packages/access-api/test/space-info.test.js#L60
+      assert.equal('did' in spaceInfoResult && spaceInfoResult.did, space.did(), 'space/info success result has did property that matches space did')
+    }
   } catch (error) {
     console.warn('unexpected result from space/info invocation', spaceInfoResult);
     throw error;
