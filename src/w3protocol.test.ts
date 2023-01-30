@@ -41,11 +41,6 @@ test('can list items in a space', { skip: false }, async t => {
       audience: `did:web:staging.web3.storage`,
       url: new URL('https://w3access-staging.protocol-labs.workers.dev'),
     },
-    // staging invoke via local access api
-    // {
-    //   audience: `did:web:staging.web3.storage`,
-    //   url: new URL('http://localhost:8787'),
-    // },
     // production invoke via production upload api
     {
       audience: `did:web:web3.storage`,
@@ -56,11 +51,6 @@ test('can list items in a space', { skip: false }, async t => {
       audience: `did:web:web3.storage`,
       url: new URL('https://access.web3.storage'),
     },
-    // // production invoke via local access api
-    // {
-    //   audience: `did:web:web3.storage`,
-    //   url: new URL('http://localhost:8787'),
-    // },
   ]
   const caseErrors = [];
   for (const testCase of cases) {
@@ -97,7 +87,7 @@ test('can list items in a space', { skip: false }, async t => {
   assert.equal(caseErrors.length, 0, 'no cases resulted in an error')
 })
 
-test('can delegate space/info fo a space', { only: true }, async (t) => {
+test('can delegate space/info for a space', { only: true, skip: false }, async (t) => {
   const w3 = createHttpConnection(
     'did:web:web3.storage' as const,
     new URL('https://access.web3.storage'),
@@ -125,10 +115,13 @@ test('can delegate space/info fo a space', { only: true }, async (t) => {
     },
     proofs: [aliceCanSpaceInfo],
   })
-  const spaceInfoResult = await w3.execute(aliceSpaceInfoInvocation);
+  const spaceInfoResults = await w3.execute(aliceSpaceInfoInvocation);
+  assert.equal(spaceInfoResults.length, 1, 'space/info invocation should only return one result')
+  const spaceInfoResult = spaceInfoResults[0];
   try {
     if ('error' in spaceInfoResult) {
-      assert.equal('status' in spaceInfoResult && spaceInfoResult.status, 404, 'error has a status code')
+      assert.ok('name' in spaceInfoResult && typeof spaceInfoResult.name === 'string', `error result is named`)
+      assert.notDeepEqual(spaceInfoResult.name, 'Error', 'error name is more specific than "Error", including info that the client can use to if they want to resolve the error')
     } else {
       // result seems relatively undocumented, but pulled this assertion from access-api space/info tests https://github.com/web3-storage/w3protocol/blob/1bacd544da803c43cf85043ecdada4dee2b3e2d3/packages/access-api/test/space-info.test.js#L60
       assert.equal('did' in spaceInfoResult && spaceInfoResult.did, space.did(), 'space/info success result has did property that matches space did')
@@ -162,7 +155,6 @@ test('w3protocol-test can upload file', { skip: true }, async (t) => {
   const connection = createHttpConnection(
     `did:web:staging.web3.storage`,
     new URL('https://w3access-staging.protocol-labs.workers.dev'),
-    // new URL('http://localhost:8787'),
   )
   let uploadResult;
   try {
