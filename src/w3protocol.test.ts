@@ -13,7 +13,7 @@ import * as CBOR from '@ucanto/transport/cbor'
 import * as ucanto from '@ucanto/core'
 import * as Client from '@ucanto/client'
 
-test('can list items in a space', { skip: false }, async t => {
+test('can list items in a space', {}, async t => {
   const space = await ed25519.generate();
   const alice = await ed25519.generate();
   const aliceCanManageSpace = await ucanto.delegate({
@@ -87,7 +87,41 @@ test('can list items in a space', { skip: false }, async t => {
   assert.equal(caseErrors.length, 0, 'no cases resulted in an error')
 })
 
-test('can delegate space/info for a space', { only: true, skip: false }, async (t) => {
+
+test(`new space can invoke space/info for itself, but gets an UnknownSpaceError because it's not known by the access-api yet`, {}, async (t) => {
+  const w3 = createHttpConnection(
+    'did:web:web3.storage' as const,
+    new URL('https://access.web3.storage'),
+  )
+  const space = await ed25519.generate();
+  const spaceInfoResults = await w3.execute(Client.invoke({
+    issuer: space,
+    audience: w3.id,
+    capability: {
+      can: 'space/info',
+      with: space.did(),
+      nb: {},
+    },
+    proofs: [],
+  }));
+  assert.equal(spaceInfoResults.length, 1, 'space/info invocation should only return one result')
+  const spaceInfoResult = spaceInfoResults[0];
+  try {
+    if ('error' in spaceInfoResult) {
+      assert.ok('name' in spaceInfoResult && typeof spaceInfoResult.name === 'string', `error result is named`)
+      assert.notDeepEqual(spaceInfoResult.name, 'Error', 'error name is more specific than "Error", including info that the client can use to if they want to resolve the error')
+      assert.deepEqual(spaceInfoResult.name, 'SpaceUnknown', 'error name is SpaceUnknown')
+    } else {
+      // result seems relatively undocumented, but pulled this assertion from access-api space/info tests https://github.com/web3-storage/w3protocol/blob/1bacd544da803c43cf85043ecdada4dee2b3e2d3/packages/access-api/test/space-info.test.js#L60
+      assert.equal('did' in spaceInfoResult && spaceInfoResult.did, space.did(), 'space/info success result has did property that matches space did')
+    }
+  } catch (error) {
+    console.warn('unexpected result from space/info invocation', spaceInfoResult);
+    throw error;
+  }
+})
+
+test('can delegate space/info for a space', {}, async (t) => {
   const w3 = createHttpConnection(
     'did:web:web3.storage' as const,
     new URL('https://access.web3.storage'),
