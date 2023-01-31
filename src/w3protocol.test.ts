@@ -167,7 +167,7 @@ test('can delegate space/info for a space', {}, async (t) => {
 })
 
 // skipped for now while we know it doesn't work
-test('w3protocol-test can upload file', { skip: true }, async (t) => {
+test('w3protocol-test can upload file', async (t) => {
   const space = await ed25519.generate();
   const alice = await ed25519.generate();
   console.log({
