@@ -12,6 +12,7 @@ import * as CAR from '@ucanto/transport/car'
 import * as CBOR from '@ucanto/transport/cbor'
 import * as ucanto from '@ucanto/core'
 import * as Client from '@ucanto/client'
+import nodeTest from 'node:test';
 
 test('can list items in a space', {}, async t => {
   const space = await ed25519.generate();
@@ -167,54 +168,63 @@ test('can delegate space/info for a space', {}, async (t) => {
 })
 
 // skipped for now while we know it doesn't work
-test('w3protocol-test can upload file', { skip: true }, async (t) => {
-  const space = await ed25519.generate();
-  const alice = await ed25519.generate();
-  console.log({
-    alice: alice.did(),
-    space: space.did(),
-  })
-  const aliceCanManageSpace = await ucanto.delegate({
-    issuer: space,
-    audience: alice,
-    capabilities: [
-      {
-        can: 'store/*',
-        with: space.did(),
-      }
-    ],
-    expiration: Infinity,
-  })
-  const file: BlobLike = new Blob(['hello world'], { type: 'text/plain' });
-  const connection = createHttpConnection(
-    `did:web:staging.web3.storage`,
-    new URL('https://w3access-staging.protocol-labs.workers.dev'),
-  )
-  let uploadResult;
-  try {
-    uploadResult = await upload.uploadFile(
-      {
-        issuer: alice,
-        audience: connection.id,
-        with: space.did(),
-        proofs: [
-          aliceCanManageSpace,
-        ],
-      },
-      file,
-      {
-        connection: connection as Ucanto.ConnectionView<any>
-      }
-    );
-  } catch (error) {
-    console.warn('error uploading file')
-    if (error && typeof error === 'object' && 'cause' in error) {
-      console.warn('error cause', error.cause);
-    }
-    throw error;
+test('w3protocol-test can upload file', async (t) => {
+  for (const connection of [
+    // upload-api
+    createHttpConnection(
+      `did:web:staging.web3.storage`,
+      new URL('https://staging.up.web3.storage'),
+    ),
+    // access-api upload-api-proxy
+    createHttpConnection(
+      `did:web:staging.web3.storage`,
+      new URL('https://w3access-staging.protocol-labs.workers.dev'),
+    )
+  ]) {
+    await testCanUploadFile(connection);
   }
-  console.log('uploaded', uploadResult)
-  assert.ok(uploadResult, 'upload returned a truthy object')
+  async function testCanUploadFile(connection: ed25519.ConnectionView<Record<string,any>>) {
+    const space = await ed25519.generate();
+    const alice = await ed25519.generate();
+    const aliceCanManageSpace = await ucanto.delegate({
+      issuer: space,
+      audience: alice,
+      capabilities: [
+        {
+          can: 'store/*',
+          with: space.did(),
+        }
+      ],
+      expiration: Infinity,
+    })
+    const file: BlobLike = new Blob(['hello world'], { type: 'text/plain' });
+    let uploadResult;
+    try {
+      uploadResult = await upload.uploadFile(
+        {
+          issuer: alice,
+          audience: connection.id,
+          with: space.did(),
+          proofs: [
+            aliceCanManageSpace,
+          ],
+        },
+        file,
+        {
+          connection: connection as Ucanto.ConnectionView<any>
+        }
+      );
+    } catch (error) {
+      console.warn('error uploading file')
+      if (error && typeof error === 'object' && 'cause' in error) {
+        console.warn('error cause', error.cause);
+      }
+      throw error;
+    }
+    console.log('uploaded', uploadResult)
+    assert.ok(uploadResult, 'upload returned a truthy object')
+  }
+  
 })
 
 function createHttpConnection<S extends Record<string,any>>(audience: Ucanto.UCAN.DID, url: URL) {
