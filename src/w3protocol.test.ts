@@ -289,3 +289,47 @@ async function createSampleDelegation() {
     ]
   })
 }
+
+function w3s() {
+  const production = createHttpConnection(
+    'did:web:web3.storage' as const,
+    new URL('https://access.web3.storage'),
+  )
+  const staging = createHttpConnection(
+    'did:web:staging.web3.storage' as const,
+    new URL('https://w3access-staging.protocol-labs.workers.dev'),
+  )
+  return {
+    staging,
+    ...production,
+  }
+}
+
+test('can invoke access/delegate', async () => {
+  const w3 = w3s().staging;
+  const issuer = await ed25519.generate();
+  const delegation = await createSampleDelegation();
+  const delegate = await Access.delegate.invoke({
+      issuer,
+      audience: w3.id,
+      with: issuer.did(),
+      nb: {
+        delegations: {
+          shouldBeACid: delegation.cid
+        }
+      },
+      proofs: [delegation]
+    }).delegate()
+  const [result] = await w3.execute(delegate);
+  warnIfError(result)
+  assert.ok(result.error)
+  // @todo - once handling is shipped this should not be HandlerNotFound
+  assert.deepEqual('name' in result && result.name, 'HandlerNotFound', 'access/delegate result is HandlerNotFound')
+  // assert.notDeepEqual(result.error, true, 'access/delegate result is not an error')
+})
+
+function warnIfError(result: Ucanto.Result<unknown, { error: true }>) {
+  if ('error' in result) {
+    console.warn('error result', result)
+  }
+}
