@@ -5,6 +5,7 @@ import * as ed25519 from '@ucanto/principal/ed25519';
 import { BlobLike } from '@web3-storage/upload-client/types';
 import * as stream from 'node:stream/web'
 import Ucanto from '@ucanto/interface';
+import * as validator from '@ucanto/validator';
 import * as UCAN from '@ipld/dag-ucan'
 import type * as UploadClientTypes from '@web3-storage/upload-client/types'
 import * as HTTP from '@ucanto/transport/http'
@@ -12,6 +13,7 @@ import * as CAR from '@ucanto/transport/car'
 import * as CBOR from '@ucanto/transport/cbor'
 import * as ucanto from '@ucanto/core'
 import * as Client from '@ucanto/client'
+import { Access } from '@web3-storage/capabilities';
 
 test('can list items in a space', {}, async t => {
   const space = await ed25519.generate();
@@ -228,5 +230,62 @@ function createHttpConnection<S extends Record<string,any>>(audience: Ucanto.UCA
       url,
       fetch: globalThis.fetch,
     })
+  })
+}
+
+test('can create access/claim invocations', async () => {
+  const issuer = await ed25519.generate();
+  const audience = await ed25519.generate();
+  const invocation = await Access.claim.invoke({
+    issuer,
+    audience,
+    with: issuer.did(),
+  }).delegate()
+  assert.ok(invocation.cid, 'invocation.cid is truthy')
+  
+  
+  const authorization = await validator.access(invocation, {
+    capability: Access.claim,
+    principal: ed25519.Verifier,
+    authority: audience,
+  })
+  assert.notDeepEqual(authorization.error, true, 'access did not result in error')
+})
+
+test('can create access/delegate invocations', async () => {
+  const issuer = await ed25519.generate();
+  const audience = await ed25519.generate();
+  const delegation = await createSampleDelegation();
+  const invocation = await Access.delegate.invoke({
+    issuer,
+    audience,
+    with: issuer.did(),
+    nb: {
+      delegations: {
+        shouldBeACid: delegation.cid
+      }
+    },
+    proofs: [delegation]
+  }).delegate()
+  assert.ok(invocation.cid, 'invocation.cid is truthy')
+
+  const authorization = await validator.access(invocation, {
+    capability: Access.delegate,
+    principal: ed25519.Verifier,
+    authority: audience,
+  })
+  assert.notDeepEqual(authorization.error, true, 'access did not result in error')
+})
+
+async function createSampleDelegation() {
+  return ucanto.delegate({
+    issuer: await ed25519.generate(),
+    audience: await ed25519.generate(),
+    capabilities: [
+      {
+        can: 'test/*',
+        with: 'urn:*'
+      }
+    ]
   })
 }
