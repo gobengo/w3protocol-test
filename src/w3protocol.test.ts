@@ -330,6 +330,21 @@ test('can invoke access/delegate', async () => {
   // assert.notDeepEqual(result.error, true, 'access/delegate result is not an error')
 })
 
+test('can invoke access/claim', async () => {
+  const w3 = w3s().staging;
+  const issuer = await ed25519.generate();
+  const delegate = await Access.claim.invoke({
+      issuer,
+      audience: w3.id,
+      with: issuer.did(),
+      proofs: []
+    }).delegate()
+  const [result] = await w3.execute(delegate);
+  warnIfError(result)
+  assert.notDeepEqual(result.error, true, 'access/delegate result is not an error')
+})
+
+
 function warnIfError(result: Ucanto.Result<unknown, { error: true }>) {
   if ('error' in result) {
     console.warn('error result', result)
