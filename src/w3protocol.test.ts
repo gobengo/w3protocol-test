@@ -169,6 +169,7 @@ test('can delegate space/info for a space', {}, async (t) => {
 })
 
 // skipped for now while we know it doesn't work
+// (it gets an ambiguous Error because the space isnt registered)
 test('w3protocol-test can upload file', { skip: true }, async (t) => {
   const space = await ed25519.generate();
   const alice = await ed25519.generate();
@@ -323,8 +324,9 @@ test('can invoke access/delegate', async () => {
   const [result] = await w3.execute(delegate);
   warnIfError(result)
   assert.ok(result.error)
-  // @todo - once handling is shipped this should not be HandlerNotFound
-  assert.deepEqual('name' in result && result.name, 'HandlerNotFound', 'access/delegate result is HandlerNotFound')
+  // this is 'good'. The only reason it's an error is the space hasn't been 'registered'
+  // via email confirmation
+  assert.deepEqual('name' in result && result.name, 'InsufficientStorage', 'access/delegate result is InsufficientStorage')
   // assert.notDeepEqual(result.error, true, 'access/delegate result is not an error')
 })
 
