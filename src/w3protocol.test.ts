@@ -13,7 +13,7 @@ import * as CAR from '@ucanto/transport/car'
 import * as CBOR from '@ucanto/transport/cbor'
 import * as ucanto from '@ucanto/core'
 import * as Client from '@ucanto/client'
-import { Access } from '@web3-storage/capabilities';
+import { Access, Space, Voucher } from '@web3-storage/capabilities';
 
 test('can list items in a space', {}, async t => {
   const space = await ed25519.generate();
@@ -306,6 +306,155 @@ function w3s() {
   }
 }
 
+class EmailAddress {
+  static from(email: string) {
+    try {
+      const [local, domain] = email.split('@');
+      if ( ! local) throw new Error(`local part of email address is required, but got ${local}`)
+      if ( ! domain) throw new Error(`comain part of email address is required, but got ${domain}`)  
+      return new EmailAddress(local, domain);
+    } catch (error) {
+      throw new Error(`unable to create EmailAddress from ${email}`)
+    }
+  }
+  constructor(
+    public local: string,
+    public domain: string,
+  ) {}
+  toString() {
+    return `${encodeURIComponent(this.local)}@${encodeURIComponent(this.domain)}`
+  }
+}
+
+// https://github.com/ucan-wg/did-mailto/
+class DidMailto {
+  constructor(
+    public domain: string,
+    public local: string,
+  ) {
+  }
+  toDid(): `did:mailto:${string}:${string}` {
+    return `did:mailto:${encodeURIComponent(this.domain)}:${encodeURIComponent(this.local)}`
+  }
+  toString() {
+    return this.toDid()
+  }
+  static fromEmail(email: EmailAddress) {
+    return new DidMailto(email.domain, email.local);
+  }
+}
+
+test('can invoke access/authorize against staging', async () => {
+  const w3 = w3s().staging;
+  const issuer = await ed25519.generate();
+  const authorizeAsEmail = await Promise.resolve((async () => {
+    const varName = 'W3S_EMAIL'
+    if ( ! (varName in process.env)) throw new Error(`env.${varName} is required to run this test`)
+    try {
+      return EmailAddress.from(process.env[varName] ?? '')
+    } catch (error) {
+      throw new Error(`unable to parse env.${varName} as EmailAddress: ${process.env[varName]}`)
+    }
+  })());
+  const invocation = await Access.authorize.invoke({
+    issuer,
+    audience: w3.id,
+    with: issuer.did(),
+    nb: {
+      as: DidMailto.fromEmail(authorizeAsEmail).toString(),
+    }
+  }).delegate()
+  const [result]  = await w3.execute(invocation);
+  assert.deepEqual(result, null, 'access/authorize result is null')
+  warnIfError(result)
+})
+
+test('can use registered space', { only: true }, async () => {
+  const w3 = w3s().staging;
+  const registeredSpace = (() => {
+    const registeredSpaceVarName = 'REGISTERED_SPACE_SIGNER'
+    if ( ! (process.env[registeredSpaceVarName])) {
+      throw new Error(`env.${registeredSpaceVarName} is required to run this test`)
+    }
+    try {
+      return ed25519.Signer.parse(process.env[registeredSpaceVarName])
+    } catch (error) {
+      throw new Error(`unable to parse env.${registeredSpaceVarName} as ed25519.Signer: ${process.env[registeredSpaceVarName]}`)
+    }
+  })()
+  const delegate = Access.delegate.invoke({
+    issuer: registeredSpace,
+    audience: w3.id,
+    with: registeredSpace.did(),
+    nb: {
+      delegations: {},
+    }
+  })
+  // ty to access/delegate as a way of testing that the space is registered
+  const [delegateResult] = await w3.execute(delegate)
+  console.log('delegateResult', delegateResult)
+  if ('name' in delegateResult && ((delegateResult as any).name === 'InsufficientStorage')) {
+    console.warn(`space ${registeredSpace.did()} is not registered.`)
+    // try to register space
+    await registerSpaceViaAccessAuthorize(
+      registeredSpace,
+      w3,
+      await readEmailAddressFromEnv(process.env, 'W3S_EMAIL'),
+    )
+  } else {
+    assert.notDeepEqual(delegateResult.error, true, 'delegate result is not an error')
+  }
+})
+
+async function registerSpaceViaVoucherClaim(
+  registeredSpace: ed25519.Signer.EdSigner,
+  connection: Ucanto.ConnectionView<Record<string,any>>,
+  email: EmailAddress
+) {
+  const claim = Voucher.claim.invoke({
+    issuer: registeredSpace,
+    audience: connection.id,
+    with: registeredSpace.did(),
+    nb: {
+      product: 'product:free',
+      identity: `mailto:${email.toString()}` as Ucanto.URI<'mailto:'>,
+      service: connection.id.did(),
+    }
+  })
+  const [claimResult] = await connection.execute(claim)
+  throw new Error(`click link in email ${email.toString()} to register space ${registeredSpace.did()} using voucher`)
+}
+
+async function registerSpaceViaAccessAuthorize(
+  registeredSpace: ed25519.Signer.EdSigner,
+  connection: Ucanto.ConnectionView<Record<string,any>>,
+  email: EmailAddress
+) {
+  const authorize = Access.authorize.invoke({
+    issuer: registeredSpace,
+    audience: connection.id,
+    with: registeredSpace.did(),
+    nb: {
+      as: DidMailto.fromEmail(email).toString(),
+    }
+  })
+  const [authorizeResult] = await connection.execute(authorize)
+  console.warn('authorizeResult', authorizeResult)
+  throw new Error(`click link in email ${email.toString()} to register space ${registeredSpace.did()}`)
+}
+
+async function readEmailAddressFromEnv(env: Record<string,string|undefined>, varName: string) {
+  const email = await Promise.resolve((async () => {
+    if ( ! (varName in env)) throw new Error(`env.${varName} is required to run this test`)
+    try {
+      return EmailAddress.from(env[varName] ?? '')
+    } catch (error) {
+      throw new Error(`unable to parse env.${varName} as EmailAddress: ${env[varName]}`)
+    }
+  })());
+  return email
+}
+
 test('can invoke access/delegate', async () => {
   const w3 = w3s().staging;
   const issuer = await ed25519.generate();
@@ -346,7 +495,7 @@ test('can invoke access/claim', async () => {
 
 
 function warnIfError(result: Ucanto.Result<unknown, { error: true }>) {
-  if ('error' in result) {
+  if (result && 'error' in result) {
     console.warn('error result', result)
   }
 }

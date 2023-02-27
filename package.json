@@ -7,7 +7,9 @@
   "scripts": {
     "build": "tsc",
     "pretest": "npm run build",
-    "test": "node --test dist"
+    "test": "node --test dist",
+    "pretest:only": "npm run pretest",
+    "test:only": "node --test --test-only dist"
   },
   "author": "",
   "license": "ISC",
@@ -21,7 +23,7 @@
     "@ucanto/client": "^4.0.3",
     "@ucanto/core": "^4.0.3",
     "@ucanto/interface": "^4.0.3",
-    "@ucanto/principal": "^4.0.3",
+    "@ucanto/principal": "^4.2.3",
     "@ucanto/transport": "^4.0.3",
     "@web3-storage/capabilities": "^2.3.0",
     "@web3-storage/upload-client": "^5.3.0"
