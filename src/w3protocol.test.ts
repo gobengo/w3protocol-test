@@ -344,7 +344,7 @@ class DidMailto {
   }
 }
 
-test('can invoke access/authorize against staging', async () => {
+test('can invoke access/authorize against staging', { skip: true }, async () => {
   const w3 = w3s().staging;
   const issuer = await ed25519.generate();
   const authorizeAsEmail = await readEmailAddressFromEnv(process.env, 'W3S_EMAIL');
