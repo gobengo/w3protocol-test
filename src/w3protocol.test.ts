@@ -406,6 +406,9 @@ test('can use registered space', { only: true }, async () => {
   }
 })
 
+/**
+ * attempt to register a space via voucher/claim invocation
+ */
 async function registerSpaceViaVoucherClaim(
   registeredSpace: ed25519.Signer.EdSigner,
   connection: Ucanto.ConnectionView<Record<string,any>>,
@@ -425,6 +428,9 @@ async function registerSpaceViaVoucherClaim(
   throw new Error(`click link in email ${email.toString()} to register space ${registeredSpace.did()} using voucher`)
 }
 
+/**
+ * attempt to register a space via access/authorize invocation
+ */
 async function registerSpaceViaAccessAuthorize(
   registeredSpace: ed25519.Signer.EdSigner,
   connection: Ucanto.ConnectionView<Record<string,any>>,
