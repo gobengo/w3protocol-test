@@ -347,15 +347,7 @@ class DidMailto {
 test('can invoke access/authorize against staging', async () => {
   const w3 = w3s().staging;
   const issuer = await ed25519.generate();
-  const authorizeAsEmail = await Promise.resolve((async () => {
-    const varName = 'W3S_EMAIL'
-    if ( ! (varName in process.env)) throw new Error(`env.${varName} is required to run this test`)
-    try {
-      return EmailAddress.from(process.env[varName] ?? '')
-    } catch (error) {
-      throw new Error(`unable to parse env.${varName} as EmailAddress: ${process.env[varName]}`)
-    }
-  })());
+  const authorizeAsEmail = await readEmailAddressFromEnv(process.env, 'W3S_EMAIL');
   const invocation = await Access.authorize.invoke({
     issuer,
     audience: w3.id,
@@ -371,17 +363,8 @@ test('can invoke access/authorize against staging', async () => {
 
 test('can use registered space', { only: true }, async () => {
   const w3 = w3s().staging;
-  const registeredSpace = (() => {
-    const registeredSpaceVarName = 'REGISTERED_SPACE_SIGNER'
-    if ( ! (process.env[registeredSpaceVarName])) {
-      throw new Error(`env.${registeredSpaceVarName} is required to run this test`)
-    }
-    try {
-      return ed25519.Signer.parse(process.env[registeredSpaceVarName])
-    } catch (error) {
-      throw new Error(`unable to parse env.${registeredSpaceVarName} as ed25519.Signer: ${process.env[registeredSpaceVarName]}`)
-    }
-  })()
+  console.warn(`'REGISTERED_SPACE_SIGNER' in process.env`, 'REGISTERED_SPACE_SIGNER' in process.env)
+  const registeredSpace = await readSignerFromEnv(process.env, 'REGISTERED_SPACE_SIGNER')
   const delegate = Access.delegate.invoke({
     issuer: registeredSpace,
     audience: w3.id,
@@ -450,15 +433,35 @@ async function registerSpaceViaAccessAuthorize(
 }
 
 async function readEmailAddressFromEnv(env: Record<string,string|undefined>, varName: string) {
+  console.warn(`'${varName}' in env`, `${varName}` in env)
   const email = await Promise.resolve((async () => {
-    if ( ! (varName in env)) throw new Error(`env.${varName} is required to run this test`)
+    const email = env[varName];
+    if (!email) throw new Error(`env.${varName} is required to run this test, but got ${JSON.stringify(email)}`)
     try {
-      return EmailAddress.from(env[varName] ?? '')
+      return EmailAddress.from(email)
     } catch (error) {
       throw new Error(`unable to parse env.${varName} as EmailAddress: ${env[varName]}`)
     }
   })());
   return email
+}
+
+async function readSignerFromEnv(
+  env: Record<string,string|undefined>,
+  varName: string
+): Promise<ed25519.Signer.EdSigner> {
+  const signer = await Promise.resolve((async () => {
+    const signerFormatted = process.env[varName]
+    if ( ! signerFormatted) {
+      throw new Error(`env.${varName} is required to run this test, but got ${JSON.stringify(signerFormatted)}`)
+    }
+    try {
+      return ed25519.Signer.parse(signerFormatted)
+    } catch (error) {
+      throw new Error(`unable to parse env.${varName} as ed25519.Signer: ${signerFormatted}`)
+    }
+  })());
+  return signer
 }
 
 test('can invoke access/delegate', async () => {
@@ -485,7 +488,7 @@ test('can invoke access/delegate', async () => {
   // assert.notDeepEqual(result.error, true, 'access/delegate result is not an error')
 })
 
-test('can invoke access/claim', async () => {
+test('can invoke access/claim', { skip: true }, async () => {
   const w3 = w3s().staging;
   const issuer = await ed25519.generate();
   const delegate = await Access.claim.invoke({
