@@ -31,3 +31,4 @@ jobs:
     - run: npm test
       env:
         REGISTERED_SPACE_SIGNER: ${{ secrets.REGISTERED_SPACE_SIGNER }}
+        W3S_EMAIL: ${{ vars.W3S_EMAIL }}
