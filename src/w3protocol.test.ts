@@ -361,7 +361,7 @@ test('can invoke access/authorize against staging', { skip: true }, async () => 
   warnIfError(result)
 })
 
-test('can access/authorize then access/claim', { only: true }, async () => {
+test('can access/authorize then access/claim', async () => {
   const w3 = w3s().staging;
   const registeredSpace = await readSignerFromEnv(process.env, 'REGISTERED_SPACE_SIGNER')
   const claim = Access.claim.invoke({
@@ -386,33 +386,6 @@ test('can access/authorize then access/claim', { only: true }, async () => {
     )
   }
   assert.notDeepEqual(Object.values(claimedDelegations).length, 0, 'access/claim result claims delegations');
-})
-
-test('can use registered space', { skip: true }, async () => {
-  const w3 = w3s().staging;
-  const registeredSpace = await readSignerFromEnv(process.env, 'REGISTERED_SPACE_SIGNER')
-  const delegate = Access.delegate.invoke({
-    issuer: registeredSpace,
-    audience: w3.id,
-    with: registeredSpace.did(),
-    nb: {
-      delegations: {},
-    }
-  })
-  // ty to access/delegate as a way of testing that the space is registered
-  const [delegateResult] = await w3.execute(delegate)
-  console.log('delegateResult', delegateResult)
-  if ('name' in delegateResult && ((delegateResult as any).name === 'InsufficientStorage')) {
-    console.warn(`space ${registeredSpace.did()} is not registered.`)
-    // try to register space
-    await registerSpaceViaAccessAuthorize(
-      registeredSpace,
-      w3,
-      await readEmailAddressFromEnv(process.env, 'W3S_EMAIL'),
-    )
-  } else {
-    assert.notDeepEqual(delegateResult.error, true, 'delegate result is not an error')
-  }
 })
 
 /**
@@ -513,21 +486,6 @@ test('can invoke access/delegate', async () => {
   assert.deepEqual('name' in result && result.name, 'InsufficientStorage', 'access/delegate result is InsufficientStorage')
   // assert.notDeepEqual(result.error, true, 'access/delegate result is not an error')
 })
-
-test('can invoke access/claim', { skip: true }, async () => {
-  const w3 = w3s().staging;
-  const issuer = await ed25519.generate();
-  const delegate = await Access.claim.invoke({
-      issuer,
-      audience: w3.id,
-      with: issuer.did(),
-      proofs: []
-    }).delegate()
-  const [result] = await w3.execute(delegate);
-  warnIfError(result)
-  assert.notDeepEqual(result.error, true, 'access/delegate result is not an error')
-})
-
 
 function warnIfError(result: Ucanto.Result<unknown, { error: true }>) {
   if (result && 'error' in result) {
