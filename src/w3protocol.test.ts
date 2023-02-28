@@ -361,7 +361,34 @@ test('can invoke access/authorize against staging', { skip: true }, async () => 
   warnIfError(result)
 })
 
-test('can use registered space', { only: true }, async () => {
+test('can access/authorize then access/claim', { only: true }, async () => {
+  const w3 = w3s().staging;
+  const registeredSpace = await readSignerFromEnv(process.env, 'REGISTERED_SPACE_SIGNER')
+  const claim = Access.claim.invoke({
+    issuer: registeredSpace,
+    audience: w3.id,
+    with: registeredSpace.did(),
+  })
+  const [claimResult] = await w3.execute(claim)
+  if ( ! ('delegations' in claimResult)) {
+    throw new Error('access/claim result missing expected delegations entry')
+  }
+  const claimedDelegations = claimResult.delegations
+  if ( ! (claimedDelegations && (typeof claimedDelegations === 'object'))) {
+    throw new Error(`access/claim result has unexpected delegations entry type: ${claimedDelegations}`)
+  }
+  if (Object.values(claimedDelegations).length === 0) {
+    // try to register space
+    await registerSpaceViaAccessAuthorize(
+      registeredSpace,
+      w3,
+      await readEmailAddressFromEnv(process.env, 'W3S_EMAIL'),
+    )
+  }
+  assert.notDeepEqual(Object.values(claimedDelegations).length, 0, 'access/claim result claims delegations');
+})
+
+test('can use registered space', { skip: true }, async () => {
   const w3 = w3s().staging;
   const registeredSpace = await readSignerFromEnv(process.env, 'REGISTERED_SPACE_SIGNER')
   const delegate = Access.delegate.invoke({
