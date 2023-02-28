@@ -363,8 +363,6 @@ test('can invoke access/authorize against staging', { skip: true }, async () => 
 
 test('can use registered space', { only: true }, async () => {
   const w3 = w3s().staging;
-  console.warn('Object.keys(process.env)', JSON.stringify(Object.keys(process.env).sort()))
-  console.warn(`'REGISTERED_SPACE_SIGNER' in process.env`, 'REGISTERED_SPACE_SIGNER' in process.env)
   const registeredSpace = await readSignerFromEnv(process.env, 'REGISTERED_SPACE_SIGNER')
   const delegate = Access.delegate.invoke({
     issuer: registeredSpace,
