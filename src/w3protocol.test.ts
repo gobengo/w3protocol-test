@@ -378,8 +378,7 @@ test('can access/authorize then access/claim', async () => {
     throw new Error(`access/claim result has unexpected delegations entry type: ${claimedDelegations}`)
   }
   if (Object.values(claimedDelegations).length === 0) {
-    // try to register space
-    await registerSpaceViaAccessAuthorize(
+    await authorizeSpaceViaAccessAuthorize(
       registeredSpace,
       w3,
       await readEmailAddressFromEnv(process.env, 'W3S_EMAIL'),
@@ -388,32 +387,7 @@ test('can access/authorize then access/claim', async () => {
   assert.notDeepEqual(Object.values(claimedDelegations).length, 0, 'access/claim result claims delegations');
 })
 
-/**
- * attempt to register a space via voucher/claim invocation
- */
-async function registerSpaceViaVoucherClaim(
-  registeredSpace: ed25519.Signer.EdSigner,
-  connection: Ucanto.ConnectionView<Record<string,any>>,
-  email: EmailAddress
-) {
-  const claim = Voucher.claim.invoke({
-    issuer: registeredSpace,
-    audience: connection.id,
-    with: registeredSpace.did(),
-    nb: {
-      product: 'product:free',
-      identity: `mailto:${email.toString()}` as Ucanto.URI<'mailto:'>,
-      service: connection.id.did(),
-    }
-  })
-  const [claimResult] = await connection.execute(claim)
-  throw new Error(`click link in email ${email.toString()} to register space ${registeredSpace.did()} using voucher`)
-}
-
-/**
- * attempt to register a space via access/authorize invocation
- */
-async function registerSpaceViaAccessAuthorize(
+async function authorizeSpaceViaAccessAuthorize(
   registeredSpace: ed25519.Signer.EdSigner,
   connection: Ucanto.ConnectionView<Record<string,any>>,
   email: EmailAddress
