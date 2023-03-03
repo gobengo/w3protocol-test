@@ -440,7 +440,7 @@ async function readSignerFromEnv(
   return signer
 }
 
-test('can invoke access/delegate', async () => {
+test('can invoke access/delegate against unregistered space and get InsufficientStorage', async () => {
   const w3 = w3s().staging;
   const issuer = await ed25519.generate();
   const delegation = await createSampleDelegation();
@@ -462,6 +462,47 @@ test('can invoke access/delegate', async () => {
   // via email confirmation
   assert.deepEqual('name' in result && result.name, 'InsufficientStorage', 'access/delegate result is InsufficientStorage')
   // assert.notDeepEqual(result.error, true, 'access/delegate result is not an error')
+})
+
+test('space access across devices', { only: true }, async () => {
+  const w3 = w3s().staging;
+
+  const registeredSpace = await readSignerFromEnv(process.env, 'REGISTERED_SPACE_SIGNER')
+  const deviceA = await ed25519.generate();
+  
+  const deviceACanUseSpace = await ucanto.delegate({
+    issuer: registeredSpace,
+    audience: deviceA,
+    capabilities: [
+      { can: '*', with: registeredSpace.did(), }
+    ]
+  })
+
+  const delegation = await createSampleDelegation();
+  const delegate = await Access.delegate.invoke({
+      issuer: deviceA,
+      audience: w3.id,
+      with: registeredSpace.did(),
+      nb: {
+        delegations: {
+          shouldBeACid: delegation.cid
+        }
+      },
+      proofs: [delegation, deviceACanUseSpace]
+    }).delegate()
+  const [result] = await w3.execute(delegate);
+  warnIfError(result)
+
+  if ('name' in result && (result as any).name === 'InsufficientStorage') {
+    await authorizeSpaceViaAccessAuthorize(
+      registeredSpace,
+      w3,
+      await readEmailAddressFromEnv(process.env, 'W3S_EMAIL'),
+    )
+  }
+
+  // @todo - do provider/add once merged https://github.com/web3-storage/w3protocol/pull/462
+  
 })
 
 function warnIfError(result: Ucanto.Result<unknown, { error: true }>) {
