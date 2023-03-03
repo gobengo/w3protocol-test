@@ -353,7 +353,8 @@ test('can invoke access/authorize against staging', { skip: true }, async () => 
     audience: w3.id,
     with: issuer.did(),
     nb: {
-      as: DidMailto.fromEmail(authorizeAsEmail).toString(),
+      iss: DidMailto.fromEmail(authorizeAsEmail).toString(),
+      att: [{ can: '*' }],
     }
   }).delegate()
   const [result]  = await w3.execute(invocation);
@@ -370,6 +371,7 @@ test('can access/authorize then access/claim', async () => {
     with: registeredSpace.did(),
   })
   const [claimResult] = await w3.execute(claim)
+  console.log('claimResult', claimResult)
   if ( ! ('delegations' in claimResult)) {
     throw new Error('access/claim result missing expected delegations entry')
   }
@@ -397,7 +399,8 @@ async function authorizeSpaceViaAccessAuthorize(
     audience: connection.id,
     with: registeredSpace.did(),
     nb: {
-      as: DidMailto.fromEmail(email).toString(),
+      iss: DidMailto.fromEmail(email).toString(),
+      att: [{ can: '*' }],
     }
   })
   const [authorizeResult] = await connection.execute(authorize)
