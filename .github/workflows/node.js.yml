@@ -13,7 +13,7 @@ jobs:
   build:
 
     runs-on: ubuntu-latest
-
+    environment: staging
     strategy:
       matrix:
         node-version: [18.x]
@@ -29,3 +29,6 @@ jobs:
     - run: npm ci
     - run: npm run build --if-present
     - run: npm test
+      env:
+        REGISTERED_SPACE_SIGNER: ${{ secrets.REGISTERED_SPACE_SIGNER }}
+        W3S_EMAIL: ${{ vars.W3S_EMAIL }}

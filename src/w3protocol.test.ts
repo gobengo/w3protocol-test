@@ -13,7 +13,7 @@ import * as CAR from '@ucanto/transport/car'
 import * as CBOR from '@ucanto/transport/cbor'
 import * as ucanto from '@ucanto/core'
 import * as Client from '@ucanto/client'
-import { Access } from '@web3-storage/capabilities';
+import { Access, Space, Voucher } from '@web3-storage/capabilities';
 
 test('can list items in a space', {}, async t => {
   const space = await ed25519.generate();
@@ -306,6 +306,140 @@ function w3s() {
   }
 }
 
+class EmailAddress {
+  static from(email: string) {
+    try {
+      const [local, domain] = email.split('@');
+      if ( ! local) throw new Error(`local part of email address is required, but got ${local}`)
+      if ( ! domain) throw new Error(`comain part of email address is required, but got ${domain}`)  
+      return new EmailAddress(local, domain);
+    } catch (error) {
+      throw new Error(`unable to create EmailAddress from ${email}`)
+    }
+  }
+  constructor(
+    public local: string,
+    public domain: string,
+  ) {}
+  toString() {
+    return `${encodeURIComponent(this.local)}@${encodeURIComponent(this.domain)}`
+  }
+}
+
+// https://github.com/ucan-wg/did-mailto/
+class DidMailto {
+  constructor(
+    public domain: string,
+    public local: string,
+  ) {
+  }
+  toDid(): `did:mailto:${string}:${string}` {
+    return `did:mailto:${encodeURIComponent(this.domain)}:${encodeURIComponent(this.local)}`
+  }
+  toString() {
+    return this.toDid()
+  }
+  static fromEmail(email: EmailAddress) {
+    return new DidMailto(email.domain, email.local);
+  }
+}
+
+test('can invoke access/authorize against staging', { skip: true }, async () => {
+  const w3 = w3s().staging;
+  const issuer = await ed25519.generate();
+  const authorizeAsEmail = await readEmailAddressFromEnv(process.env, 'W3S_EMAIL');
+  const invocation = await Access.authorize.invoke({
+    issuer,
+    audience: w3.id,
+    with: issuer.did(),
+    nb: {
+      iss: DidMailto.fromEmail(authorizeAsEmail).toString(),
+      att: [{ can: '*' }],
+    }
+  }).delegate()
+  const [result]  = await w3.execute(invocation);
+  assert.deepEqual(result, null, 'access/authorize result is null')
+  warnIfError(result)
+})
+
+test('can access/authorize then access/claim', async () => {
+  const w3 = w3s().staging;
+  const registeredSpace = await readSignerFromEnv(process.env, 'REGISTERED_SPACE_SIGNER')
+  const claim = Access.claim.invoke({
+    issuer: registeredSpace,
+    audience: w3.id,
+    with: registeredSpace.did(),
+  })
+  const [claimResult] = await w3.execute(claim)
+  assert.notDeepEqual(claimResult.error, true, 'access/claim result should not be an error')
+  if ( ! ('delegations' in claimResult)) {
+    throw new Error('access/claim result missing expected delegations entry')
+  }
+  const claimedDelegations = claimResult.delegations
+  if ( ! (claimedDelegations && (typeof claimedDelegations === 'object'))) {
+    throw new Error(`access/claim result has unexpected delegations entry type: ${claimedDelegations}`)
+  }
+  if (Object.values(claimedDelegations).length === 0) {
+    await authorizeSpaceViaAccessAuthorize(
+      registeredSpace,
+      w3,
+      await readEmailAddressFromEnv(process.env, 'W3S_EMAIL'),
+    )
+  }
+  assert.notDeepEqual(Object.values(claimedDelegations).length, 0, 'access/claim result claims delegations');
+})
+
+async function authorizeSpaceViaAccessAuthorize(
+  registeredSpace: ed25519.Signer.EdSigner,
+  connection: Ucanto.ConnectionView<Record<string,any>>,
+  email: EmailAddress
+) {
+  const authorize = Access.authorize.invoke({
+    issuer: registeredSpace,
+    audience: connection.id,
+    with: registeredSpace.did(),
+    nb: {
+      iss: DidMailto.fromEmail(email).toString(),
+      att: [{ can: '*' }],
+    }
+  })
+  const [authorizeResult] = await connection.execute(authorize)
+  console.warn('authorizeResult', authorizeResult)
+  throw new Error(`click link in email ${email.toString()} to register space ${registeredSpace.did()}`)
+}
+
+async function readEmailAddressFromEnv(env: Record<string,string|undefined>, varName: string) {
+  console.warn(`'${varName}' in env`, `${varName}` in env)
+  const email = await Promise.resolve((async () => {
+    const email = env[varName];
+    if (!email) throw new Error(`env.${varName} is required to run this test, but got ${JSON.stringify(email)}`)
+    try {
+      return EmailAddress.from(email)
+    } catch (error) {
+      throw new Error(`unable to parse env.${varName} as EmailAddress: ${env[varName]}`)
+    }
+  })());
+  return email
+}
+
+async function readSignerFromEnv(
+  env: Record<string,string|undefined>,
+  varName: string
+): Promise<ed25519.Signer.EdSigner> {
+  const signer = await Promise.resolve((async () => {
+    const signerFormatted = process.env[varName]
+    if ( ! signerFormatted) {
+      throw new Error(`env.${varName} is required to run this test, but got ${JSON.stringify(signerFormatted)}`)
+    }
+    try {
+      return ed25519.Signer.parse(signerFormatted)
+    } catch (error) {
+      throw new Error(`unable to parse env.${varName} as ed25519.Signer: ${signerFormatted}`)
+    }
+  })());
+  return signer
+}
+
 test('can invoke access/delegate', async () => {
   const w3 = w3s().staging;
   const issuer = await ed25519.generate();
@@ -330,23 +464,8 @@ test('can invoke access/delegate', async () => {
   // assert.notDeepEqual(result.error, true, 'access/delegate result is not an error')
 })
 
-test('can invoke access/claim', async () => {
-  const w3 = w3s().staging;
-  const issuer = await ed25519.generate();
-  const delegate = await Access.claim.invoke({
-      issuer,
-      audience: w3.id,
-      with: issuer.did(),
-      proofs: []
-    }).delegate()
-  const [result] = await w3.execute(delegate);
-  warnIfError(result)
-  assert.notDeepEqual(result.error, true, 'access/delegate result is not an error')
-})
-
-
 function warnIfError(result: Ucanto.Result<unknown, { error: true }>) {
-  if ('error' in result) {
+  if (result && 'error' in result) {
     console.warn('error result', result)
   }
 }
