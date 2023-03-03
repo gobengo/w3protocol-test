@@ -371,7 +371,7 @@ test('can access/authorize then access/claim', async () => {
     with: registeredSpace.did(),
   })
   const [claimResult] = await w3.execute(claim)
-  console.log('claimResult', claimResult)
+  assert.notDeepEqual(claimResult.error, true, 'access/claim result should not be an error')
   if ( ! ('delegations' in claimResult)) {
     throw new Error('access/claim result missing expected delegations entry')
   }
