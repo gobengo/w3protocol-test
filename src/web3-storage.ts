@@ -11,13 +11,12 @@ import * as CAR from '@ucanto/transport/car'
 import * as CBOR from '@ucanto/transport/cbor'
 import * as ucanto from '@ucanto/core'
 import * as Client from '@ucanto/client'
-import { Service as AccessService } from '@web3-storage/access/types'
 
 export const production = createHttpConnection(
   'did:web:web3.storage' as const,
   new URL('https://access.web3.storage'),
 )
-export const staging = createHttpConnection<AccessService>(
+export const staging = createHttpConnection(
   'did:web:staging.web3.storage' as const,
   new URL('https://w3access-staging.protocol-labs.workers.dev'),
 )

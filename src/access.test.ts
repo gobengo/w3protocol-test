@@ -14,7 +14,6 @@ import * as CBOR from '@ucanto/transport/cbor'
 import * as ucanto from '@ucanto/core'
 import * as Client from '@ucanto/client'
 import { Access, Provider, Space, Voucher } from '@web3-storage/capabilities';
-import { bytesToDelegations } from '@web3-storage/access/encoding';
 import { staging } from './web3-storage.js';
 import { createSampleDelegation, readSignerFromEnv, warnIfError } from './ucanto-utils.js';
 import { readEmailAddressFromEnv } from './email.js';
@@ -27,11 +26,12 @@ const testerEmail = await readEmailAddressFromEnv(process.env, 'W3S_EMAIL')
 
 for (const web3Storage of [staging]) {
   test('can space/info with=registeredSpace iss=registeredSpace', async () => {
-    const spaceInfoResult = await info.invoke({
+    const spaceInfoInvocation = await info.invoke({
       issuer: registeredSpace,
       audience: web3Storage.id,
       with: registeredSpace.did(),
-    }).execute(web3Storage)
+    }).delegate()
+    const [spaceInfoResult] = await web3Storage.execute(spaceInfoInvocation)
     console.log({ spaceInfoResult })
     throw new Error('WIP')
   })

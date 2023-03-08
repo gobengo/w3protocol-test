@@ -14,7 +14,6 @@ import * as CBOR from '@ucanto/transport/cbor'
 import * as ucanto from '@ucanto/core'
 import * as Client from '@ucanto/client'
 import { Access, Provider, Space, Voucher } from '@web3-storage/capabilities';
-import { bytesToDelegations } from '@web3-storage/access/encoding';
 import { createHttpConnection, staging } from './web3-storage.js';
 import { EmailAddress, readEmailAddressFromEnv } from './email.js';
 import { readSignerFromEnv, warnIfError } from './ucanto-utils.js';
