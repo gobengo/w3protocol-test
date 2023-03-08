@@ -27,7 +27,7 @@
     "@ucanto/transport": "^5.0.0",
     "@ucanto/validator": "^5.0.0",
     "@web3-storage/access": "^9.4.0",
-    "@web3-storage/capabilities": "^3.0.0",
+    "@web3-storage/capabilities": "^3.1.0",
     "@web3-storage/upload-client": "^6.0.0"
   }
 }
