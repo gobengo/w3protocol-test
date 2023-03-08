@@ -4,7 +4,7 @@ import * as upload from '@web3-storage/upload-client'
 import * as ed25519 from '@ucanto/principal/ed25519';
 import { BlobLike } from '@web3-storage/upload-client/types';
 import * as stream from 'node:stream/web'
-import Ucanto from '@ucanto/interface';
+import Ucanto, { Principal } from '@ucanto/interface';
 import * as validator from '@ucanto/validator';
 import * as UCAN from '@ipld/dag-ucan'
 import type * as UploadClientTypes from '@web3-storage/upload-client/types'
@@ -13,7 +13,11 @@ import * as CAR from '@ucanto/transport/car'
 import * as CBOR from '@ucanto/transport/cbor'
 import * as ucanto from '@ucanto/core'
 import * as Client from '@ucanto/client'
-import { Access, Space, Voucher } from '@web3-storage/capabilities';
+import { Access, Provider, Space, Voucher } from '@web3-storage/capabilities';
+import { createHttpConnection, staging } from './web3-storage.js';
+import { EmailAddress, readEmailAddressFromEnv } from './email.js';
+import { readSignerFromEnv, warnIfError } from './ucanto-utils.js';
+import { DidMailto } from './did-mailto.js';
 
 test('can list items in a space', {}, async t => {
   const space = await ed25519.generate();
@@ -220,20 +224,6 @@ test('w3protocol-test can upload file', { skip: true }, async (t) => {
   assert.ok(uploadResult, 'upload returned a truthy object')
 })
 
-function createHttpConnection<S extends Record<string,any>>(audience: Ucanto.UCAN.DID, url: URL) {
-  return Client.connect({
-    id: {
-      did: () => audience
-    },
-    encoder: CAR,
-    decoder: CBOR,
-    channel: HTTP.open<S>({
-      url,
-      fetch: globalThis.fetch,
-    })
-  })
-}
-
 test('can create access/claim invocations', async () => {
   const issuer = await ed25519.generate();
   const audience = await ed25519.generate();
@@ -291,61 +281,8 @@ async function createSampleDelegation() {
   })
 }
 
-function w3s() {
-  const production = createHttpConnection(
-    'did:web:web3.storage' as const,
-    new URL('https://access.web3.storage'),
-  )
-  const staging = createHttpConnection(
-    'did:web:staging.web3.storage' as const,
-    new URL('https://w3access-staging.protocol-labs.workers.dev'),
-  )
-  return {
-    staging,
-    ...production,
-  }
-}
-
-class EmailAddress {
-  static from(email: string) {
-    try {
-      const [local, domain] = email.split('@');
-      if ( ! local) throw new Error(`local part of email address is required, but got ${local}`)
-      if ( ! domain) throw new Error(`comain part of email address is required, but got ${domain}`)  
-      return new EmailAddress(local, domain);
-    } catch (error) {
-      throw new Error(`unable to create EmailAddress from ${email}`)
-    }
-  }
-  constructor(
-    public local: string,
-    public domain: string,
-  ) {}
-  toString() {
-    return `${encodeURIComponent(this.local)}@${encodeURIComponent(this.domain)}`
-  }
-}
-
-// https://github.com/ucan-wg/did-mailto/
-class DidMailto {
-  constructor(
-    public domain: string,
-    public local: string,
-  ) {
-  }
-  toDid(): `did:mailto:${string}:${string}` {
-    return `did:mailto:${encodeURIComponent(this.domain)}:${encodeURIComponent(this.local)}`
-  }
-  toString() {
-    return this.toDid()
-  }
-  static fromEmail(email: EmailAddress) {
-    return new DidMailto(email.domain, email.local);
-  }
-}
-
 test('can invoke access/authorize against staging', { skip: true }, async () => {
-  const w3 = w3s().staging;
+  const w3 = staging
   const issuer = await ed25519.generate();
   const authorizeAsEmail = await readEmailAddressFromEnv(process.env, 'W3S_EMAIL');
   const invocation = await Access.authorize.invoke({
@@ -357,13 +294,21 @@ test('can invoke access/authorize against staging', { skip: true }, async () => 
       att: [{ can: '*' }],
     }
   }).delegate()
-  const [result]  = await w3.execute(invocation);
+  const [result]  = await w3.execute(Access.authorize.invoke({
+    issuer,
+    audience: w3.id,
+    with: issuer.did(),
+    nb: {
+      iss: DidMailto.fromEmail(authorizeAsEmail).toString(),
+      att: [{ can: '*' }],
+    }
+  }));
   assert.deepEqual(result, null, 'access/authorize result is null')
   warnIfError(result)
 })
 
 test('can access/authorize then access/claim', async () => {
-  const w3 = w3s().staging;
+  const w3 = staging
   const registeredSpace = await readSignerFromEnv(process.env, 'REGISTERED_SPACE_SIGNER')
   const claim = Access.claim.invoke({
     issuer: registeredSpace,
@@ -382,6 +327,7 @@ test('can access/authorize then access/claim', async () => {
   if (Object.values(claimedDelegations).length === 0) {
     await authorizeSpaceViaAccessAuthorize(
       registeredSpace,
+      registeredSpace,
       w3,
       await readEmailAddressFromEnv(process.env, 'W3S_EMAIL'),
     )
@@ -390,14 +336,15 @@ test('can access/authorize then access/claim', async () => {
 })
 
 async function authorizeSpaceViaAccessAuthorize(
-  registeredSpace: ed25519.Signer.EdSigner,
+  issuer: ed25519.Signer.EdSigner,
+  registeredSpace: Principal<Ucanto.DID<'key'>>,
   connection: Ucanto.ConnectionView<Record<string,any>>,
   email: EmailAddress
 ) {
   const authorize = Access.authorize.invoke({
-    issuer: registeredSpace,
+    issuer,
     audience: connection.id,
-    with: registeredSpace.did(),
+    with: issuer.did(),
     nb: {
       iss: DidMailto.fromEmail(email).toString(),
       att: [{ can: '*' }],
@@ -408,40 +355,9 @@ async function authorizeSpaceViaAccessAuthorize(
   throw new Error(`click link in email ${email.toString()} to register space ${registeredSpace.did()}`)
 }
 
-async function readEmailAddressFromEnv(env: Record<string,string|undefined>, varName: string) {
-  console.warn(`'${varName}' in env`, `${varName}` in env)
-  const email = await Promise.resolve((async () => {
-    const email = env[varName];
-    if (!email) throw new Error(`env.${varName} is required to run this test, but got ${JSON.stringify(email)}`)
-    try {
-      return EmailAddress.from(email)
-    } catch (error) {
-      throw new Error(`unable to parse env.${varName} as EmailAddress: ${env[varName]}`)
-    }
-  })());
-  return email
-}
 
-async function readSignerFromEnv(
-  env: Record<string,string|undefined>,
-  varName: string
-): Promise<ed25519.Signer.EdSigner> {
-  const signer = await Promise.resolve((async () => {
-    const signerFormatted = process.env[varName]
-    if ( ! signerFormatted) {
-      throw new Error(`env.${varName} is required to run this test, but got ${JSON.stringify(signerFormatted)}`)
-    }
-    try {
-      return ed25519.Signer.parse(signerFormatted)
-    } catch (error) {
-      throw new Error(`unable to parse env.${varName} as ed25519.Signer: ${signerFormatted}`)
-    }
-  })());
-  return signer
-}
-
-test('can invoke access/delegate', async () => {
-  const w3 = w3s().staging;
+test('can invoke access/delegate against unregistered space and get InsufficientStorage', async () => {
+  const w3 = staging;
   const issuer = await ed25519.generate();
   const delegation = await createSampleDelegation();
   const delegate = await Access.delegate.invoke({
@@ -463,9 +379,3 @@ test('can invoke access/delegate', async () => {
   assert.deepEqual('name' in result && result.name, 'InsufficientStorage', 'access/delegate result is InsufficientStorage')
   // assert.notDeepEqual(result.error, true, 'access/delegate result is not an error')
 })
-
-function warnIfError(result: Ucanto.Result<unknown, { error: true }>) {
-  if (result && 'error' in result) {
-    console.warn('error result', result)
-  }
-}
